@@ -3,6 +3,8 @@ import sys
 import yfinance as yf
 import pandas as pd
 import matplotlib.pyplot as plt
+# Enter Ticker as command line argument
+# e.g. python YahooFinance.py NFLX
 #yahoo finance package
 ticker=sys.argv[1]
 
