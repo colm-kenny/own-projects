@@ -1,0 +1,163 @@
+---
+title: "FYP Work"
+output: html_notebook
+---
+
+```{r setup}
+#packages
+library(readr)
+library(tibble)
+library(dplyr)
+library(TSA)
+library(forecast)
+library(lattice)
+library(pander)
+```
+
+```{r}
+#import base datasets, clean and name etc.
+Transaction_Data <- read_csv("C:/Users/ckenn/Desktop/Transaction Data.csv", 
+                             col_types = cols(Date = col_date(format = "%d/%m/%Y")), col_names = )
+Stringency <- read_csv("C:/Users/ckenn/Desktop/Methodolodgy/Stringency.csv", 
+                       col_types = cols(Date = col_date(format = "%d%b%Y")))
+```
+```{r}
+Stringency <- Stringency[,1:2]
+df_stringency <- tbl_df(Stringency)
+df_Transaction <- tbl_df(Transaction_Data)
+master_df <- right_join(df_stringency, df_Transaction, by = "Date")
+
+```
+
+```{r}
+#create base df with date, restrictions, Total spending - ATM withdrawals
+
+base_df <- select(master_df, 1,2,3,7)
+base_df <- mutate(base_df, Spending = base_df$`Spending on All Cards` - base_df$`ATM withdrawals`)
+base_df <- select(base_df, 1,2,5)
+```
+
+
+```{r i}
+#summary stats for restriction levels
+restriction_2021 <- filter(base_df, Date > "2020-12-31" & Date < "2022-01-01")
+
+y.ma <- ma(x = base_df$Spending, order = 7)
+y.ma <- y.ma[! is.na(y.ma)]
+
+
+#plot saved to png
+png(file="spending-v-restrictions-timeline.png")
+plot(base_df$Date[7:length(base_df$Date)], y.ma, ylab = "Spending 7-day Moving Average (€1,000's)", type = "l", main = "Spending and Restrictions Mar 2020 to Feb 2022", xlab = "Date")
+par(new = TRUE)
+plot(base_df$Date, base_df$Restrictions, type = "l", lty = "dashed", col = "red", axes = FALSE, xlab = "", ylab = "")
+axis(side = 4, at = pretty(range(base_df$Restrictions)))
+mtext("Restriction Level", side = 4, line = 3) 
+legend("bottomright", legend = c("Spending", "Restrictions"), bty = "n", lty = c("solid", "dashed"), col = c("black", "red"))
+dev.off()
+```
+
+```{r ii}
+#sectoral data
+#graphs by sector, need layout function
+#summary statistics - need data split Jan 2021 and Jan 2022
+#start date for sectors is 1st Oct 2020
+sector_df <- filter(master_df, Date > "2020-09-30")
+sector_df <- select(sector_df, -3, -4, -5, -6, -7,-8, -9)
+#moving averages - grocery retail transport accommodation dining other
+grocery.ma <- ma(x = sector_df$`Groceries/ Perishables`, order = 7)
+grocery.ma <- grocery.ma[! is.na(grocery.ma)]
+retail.ma <- ma(x = sector_df$`Other Retail`, order = 7)
+retail.ma <- retail.ma[! is.na(retail.ma)]
+transport.ma <- ma(x = sector_df$Transport, order = 7)
+transport.ma <- transport.ma[! is.na(transport.ma)]
+accommodation.ma <- ma(x = sector_df$Accommodation, order = 7)
+accommodation.ma <- accommodation.ma[! is.na(accommodation.ma)]
+dining.ma <- ma(x = sector_df$`Restaurants/ Dining`, order = 7)
+dining.ma <- dining.ma[! is.na(dining.ma)]
+other.ma <- ma(x = sector_df$Other, order = 7)
+other.ma <- other.ma[! is.na(other.ma)]
+
+png("sectors.png")
+par(mfrow=c(3,2))
+plot(sector_df$Date[7:length(sector_df$Date)], grocery.ma, type = "l", ylab = "Groceries ", xlab = "")
+par(new=TRUE)
+plot(sector_df$Date, sector_df$Restrictions, type = "l", lty = "dashed", col = "red", axes = FALSE, xlab = "", ylab = "")
+
+plot(sector_df$Date[7:length(sector_df$Date)], retail.ma, type = "l", ylab = "Retail ", xlab = "")
+par(new=TRUE)
+plot(sector_df$Date, sector_df$Restrictions, type = "l", lty = "dashed", col = "red", axes = FALSE, xlab = "", ylab = "")
+
+plot(sector_df$Date[7:length(sector_df$Date)], transport.ma, type = "l", ylab = "Transport ", xlab = "")
+par(new=TRUE)
+plot(sector_df$Date, sector_df$Restrictions, type = "l", lty = "dashed", col = "red", axes = FALSE, xlab = "", ylab = "")
+
+plot(sector_df$Date[7:length(sector_df$Date)], accommodation.ma, type = "l", ylab = "Accommodation ", xlab = "")
+par(new=TRUE)
+plot(sector_df$Date, sector_df$Restrictions, type = "l", lty = "dashed", col = "red", axes = FALSE, xlab = "", ylab = "")
+
+plot(sector_df$Date[7:length(sector_df$Date)], dining.ma, type = "l", ylab = "Dining ", xlab = "")
+par(new=TRUE)
+plot(sector_df$Date, sector_df$Restrictions, type = "l", lty = "dashed", col = "red", axes = FALSE, xlab = "", ylab = "")
+
+plot(sector_df$Date[7:length(sector_df$Date)], other.ma, type = "l", ylab = "Other ", xlab = "")
+par(new=TRUE)
+plot(sector_df$Date, sector_df$Restrictions, type = "l", lty = "dashed", col = "red", axes = FALSE, xlab = "", ylab = "")
+dev.off()
+```
+
+```{r iii}
+#summaries - create datasets
+sectors_2021 <- filter(sector_df, Date > "2020-12-31" & Date < "2021-02-01")
+sectors_2022 <- filter(sector_df, Date > "2021-12-31" & Date < "2022-02-01")
+
+
+sector_diff <- sectors_2021
+for (i in 3:8) {
+  sector_diff[,i] <- sectors_2022[,i] - sectors_2021[,i]
+}
+summary(sector_diff[3:8])
+```
+
+
+
+
+
+
+
+
+```{r iv}
+#in store spending %
+#filter dataset, then mutate percentage variable
+iv_data <- filter(master_df, Date > "2020-09-30")
+iv_data <- mutate(iv_data, pct = (iv_data$`In-Store Spending`/(iv_data$`Spending on All Cards`-iv_data$`ATM withdrawals`))*100)
+iv_data <- select(iv_data, 1,2,16)
+pct_ma <- ma(x = iv_data$pct, order = 7)
+pct_ma <- pct_ma[! is.na(pct_ma)]
+
+
+png("In-Store.png")
+plot(iv_data$Date[7:length(iv_data$Date)], pct_ma, type = "l", xlab = "Date", ylab = "In-Store %", main = "In-Store Spending % and Restrictions Oct 2020 to Feb 2022")
+par(new = TRUE)
+plot(iv_data$Date, iv_data$Restrictions, type = "l", lty = "dashed", col = "red", axes = FALSE, xlab = "", ylab = "")
+axis(side = 4, at = pretty(range(iv_data$Restrictions)))
+mtext("Restriction Level", side = 4, line = 3) 
+legend("bottomright", legend = c("In-Store%", "Restrictions"), bty = "n", lty = c("solid", "dashed"), col = c("black", "red"))
+dev.off()
+```
+```{r}
+diff_weekly <- diff(base_df$Spending, lag = 364, differences = 1)
+diff_restriction <- diff(base_df$Restrictions, lag = 364, differences = 1)
+
+png("differenced.png")
+plot(base_df$Date[365:length(base_df$Date)], diff_weekly, ylab = "Change in Spending 364 day difference (€1,000's)", type = "l", main = "Spending and Restrictions 364 day differenced Mar 2021 to Feb 2022", xlab = "Date")
+par(new = TRUE)
+abline(h=0, col="grey", lty = "dotted")
+par(new = TRUE)
+plot(base_df$Date[365:length(base_df$Restrictions)], diff_restriction, type = "l", lty = "dashed", col = "red", axes = FALSE, xlab = "", ylab = "")
+axis(side = 4, at = pretty(range(diff_restriction)))
+mtext("Restriction Level", side = 4, line = 3) 
+legend("topright", legend = c("Spending", "Restrictions"), bty = "n", lty = c("solid", "dashed"), col = c("black", "red"))
+dev.off()
+```
+
